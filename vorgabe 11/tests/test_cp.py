@@ -71,3 +71,29 @@ class Test_Cp:
         assert fs.inodes[4].n_type == 2 # meaning it is marked as directory
         assert fs.inodes[3].direct_blocks[0] == 4 #fs.inodes[0] is the root node. its first direct block should point to the 1st inode (where the new dir is located)
         assert fs.inodes[4].parent == 3
+
+    # copying from a non-existing source should fail with -1
+    def test_cp_missing_source(self):
+        fs = setup(5)
+        retval = libc.fs_cp(ctypes.byref(fs), ctypes.c_char_p(b"/nosrc"), ctypes.c_char_p(b"/dest"))
+        assert retval == -1
+
+    # copying to an existing destination should return -2
+    def test_cp_existing_dest(self):
+        fs = setup(5)
+        fs = set_fil(name="src",inode=1,parent=0,parent_block=0,fs=fs)
+        fs = set_fil(name="dest",inode=2,parent=0,parent_block=1,fs=fs)
+        retval = libc.fs_cp(ctypes.byref(fs), ctypes.c_char_p(b"/src"), ctypes.c_char_p(b"/dest"))
+        assert retval == -2
+
+    # insufficient space (no free blocks) should return -1
+    def test_cp_insufficient_space(self):
+        fs = setup(5)
+        fs = set_fil(name="src",inode=1,parent=0,parent_block=0,fs=fs)
+        set_data_block_with_string(block_num=0,string_data=LONG_DATA[:1024],parent_inode=1,parent_block_num=0,fs=fs)
+        set_data_block_with_string(block_num=1,string_data=LONG_DATA[1024:],parent_inode=1,parent_block_num=1,fs=fs)
+        fs = set_fil(name="busy",inode=2,parent=0,parent_block=1,fs=fs)
+        set_data_block_with_string(block_num=2,string_data="a",parent_inode=2,parent_block_num=0,fs=fs)
+        set_data_block_with_string(block_num=3,string_data="b",parent_inode=2,parent_block_num=1,fs=fs)
+        retval = libc.fs_cp(ctypes.byref(fs), ctypes.c_char_p(b"/src"), ctypes.c_char_p(b"/copy"))
+        assert retval == -1

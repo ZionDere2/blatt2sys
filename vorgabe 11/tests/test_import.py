@@ -45,4 +45,36 @@ class Test_Imp:
         delete_temp_file()
 
 
-    # TODO: add test for failing operations
+    # invalid internal path should return -1 and not change filesystem
+    def test_import_invalid_path(self):
+        fs = setup(5)
+        filename = create_temp_file(data=SHORT_DATA)
+        retval = libc.fs_import(ctypes.byref(fs), ctypes.c_char_p(b"fil1"), ctypes.c_char_p(bytes(filename, "utf-8")))
+        assert retval == -1
+        assert fs.inodes[0].direct_blocks[0] == -1
+        delete_temp_file()
+
+    # missing external file should fail with -1
+    def test_import_missing_external(self):
+        fs = setup(5)
+        fs = set_fil(name="fil1",inode=1,parent=0,parent_block=0,fs=fs)
+        retval = libc.fs_import(ctypes.byref(fs), ctypes.c_char_p(b"/fil1"), ctypes.c_char_p(b"/no/such/file"))
+        assert retval == -1
+        assert fs.inodes[1].direct_blocks[0] == -1
+
+    # insufficient space should return -2
+    def test_import_insufficient_space(self):
+        fs = setup(5)
+        fs = set_fil(name="dummy1",inode=1,parent=0,parent_block=0,fs=fs)
+        fs = set_fil(name="dummy2",inode=2,parent=0,parent_block=1,fs=fs)
+        fs = set_fil(name="dummy3",inode=3,parent=0,parent_block=2,fs=fs)
+        set_data_block_with_string(block_num=0,string_data="a",parent_inode=1,parent_block_num=0,fs=fs)
+        set_data_block_with_string(block_num=1,string_data="b",parent_inode=2,parent_block_num=0,fs=fs)
+        set_data_block_with_string(block_num=2,string_data="c",parent_inode=3,parent_block_num=0,fs=fs)
+        set_data_block_with_string(block_num=3,string_data="d",parent_inode=3,parent_block_num=1,fs=fs)
+        fs = set_fil(name="target",inode=4,parent=0,parent_block=3,fs=fs)
+        filename = create_temp_file(data=LONG_DATA)
+        retval = libc.fs_import(ctypes.byref(fs), ctypes.c_char_p(b"/target"), ctypes.c_char_p(bytes(filename, "utf-8")))
+        assert retval == -2
+        assert fs.inodes[4].direct_blocks[0] == -1
+        delete_temp_file()
