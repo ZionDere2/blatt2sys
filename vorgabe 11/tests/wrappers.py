@@ -119,8 +119,17 @@ def create_temp_file(data=SHORT_DATA,filename=DEFAULT_TEST_FILE_NAME):
     file.close
     return filename
 
+def create_temp_binary_file(data=b"\x00", filename=DEFAULT_TEST_FILE_NAME):
+    with open(filename, "wb") as f:
+        f.write(data)
+    return filename
+
 def read_temp_file(filename = DEFAULT_TEST_FILE_NAME):
     return open(filename,"r").read()
+
+def read_temp_binary_file(filename = DEFAULT_TEST_FILE_NAME):
+    with open(filename, "rb") as f:
+        return f.read()
 
 def delete_temp_file(filename=DEFAULT_TEST_FILE_NAME):
     os.remove(filename)
