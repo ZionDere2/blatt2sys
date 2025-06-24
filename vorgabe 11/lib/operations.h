@@ -112,5 +112,25 @@ int fs_import(file_system *fs, char *int_path, char *ext_path);
  */
 int fs_export(file_system *fs, char *int_path, char *ext_path);
 
+/**
+ * Marks the given data block as used and decreases the free_blocks counter.
+ *
+ * @Returns 0 on success, -1 if the block number is invalid or already used.
+ */
+int allocate_data_block(file_system *fs, int block_num);
+
+/**
+ * Releases the given data block and increases the free_blocks counter.
+ *
+ * @Returns 0 on success, -1 if the block number is invalid or already free.
+ */
+int release_data_block(file_system *fs, int block_num);
+
+/**
+ * Removes an inode and all of its children recursively while freeing used
+ * data blocks.
+ */
+void remove_inode_recursive(file_system *fs, int inode_no);
+
 #define OPERATIONS_H
 #endif /* OPERATIONS_H */
