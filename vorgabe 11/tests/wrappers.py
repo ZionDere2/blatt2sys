@@ -54,6 +54,15 @@ class FileSystem(ctypes.Structure):
     ]
 
 
+# register helper functions from the C library
+libc.allocate_data_block.argtypes = [ctypes.POINTER(FileSystem), ctypes.c_int]
+libc.allocate_data_block.restype = ctypes.c_int
+libc.release_data_block.argtypes = [ctypes.POINTER(FileSystem), ctypes.c_int]
+libc.release_data_block.restype = ctypes.c_int
+libc.remove_inode_recursive.argtypes = [ctypes.POINTER(FileSystem), ctypes.c_int]
+libc.remove_inode_recursive.restype = None
+
+
 # creates a new filesystem using the C-Function
 def setup(fs_size):
     fsize= ctypes.c_int();
@@ -103,7 +112,7 @@ def set_data_block(block_num: int, data, data_size,parent_inode:int,parent_block
             i+=1
         else:
             break
-    fs.free_list[block_num] = 0
+    libc.allocate_data_block(ctypes.byref(fs), block_num)
 
     return fs
 
@@ -124,3 +133,13 @@ def read_temp_file(filename = DEFAULT_TEST_FILE_NAME):
 
 def delete_temp_file(filename=DEFAULT_TEST_FILE_NAME):
     os.remove(filename)
+
+
+def free_block(block_num: int, fs: FileSystem):
+    libc.release_data_block(ctypes.byref(fs), block_num)
+    return fs
+
+
+def remove_inode_rec(inode: int, fs: FileSystem):
+    libc.remove_inode_recursive(ctypes.byref(fs), inode)
+    return fs
