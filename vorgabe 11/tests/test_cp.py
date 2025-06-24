@@ -71,3 +71,25 @@ class Test_Cp:
         assert fs.inodes[4].n_type == 2 # meaning it is marked as directory
         assert fs.inodes[3].direct_blocks[0] == 4 #fs.inodes[0] is the root node. its first direct block should point to the 1st inode (where the new dir is located)
         assert fs.inodes[4].parent == 3
+
+    # copy should rollback when not enough inodes are available
+    def test_cp_rollback_no_inodes(self):
+        fs = setup(4)
+        libc.fs_mkdir(ctypes.byref(fs), ctypes.c_char_p(b"/src"))
+        libc.fs_mkdir(ctypes.byref(fs), ctypes.c_char_p(b"/src/inner"))
+        retval = libc.fs_cp(ctypes.byref(fs), ctypes.c_char_p(b"/src"), ctypes.c_char_p(b"/dst"))
+        assert retval == -1
+        assert fs.inodes[0].direct_blocks[1] == -1
+        assert fs.inodes[3].n_type == 3
+
+    # copy should rollback when not enough blocks are available
+    def test_cp_rollback_no_blocks(self):
+        fs = setup(3)
+        libc.fs_mkfile(ctypes.byref(fs), ctypes.c_char_p(b"/src"))
+        set_data_block_with_string(block_num=0, string_data="A"*1024, parent_inode=1, parent_block_num=0, fs=fs)
+        set_data_block_with_string(block_num=1, string_data="B"*1024, parent_inode=1, parent_block_num=1, fs=fs)
+        retval = libc.fs_cp(ctypes.byref(fs), ctypes.c_char_p(b"/src"), ctypes.c_char_p(b"/dst"))
+        assert retval == -1
+        assert fs.inodes[0].direct_blocks[1] == -1
+        assert fs.free_list[2] == 1
+        assert fs.inodes[2].n_type == 3
