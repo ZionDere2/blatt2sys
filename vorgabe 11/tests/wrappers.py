@@ -2,6 +2,7 @@ import enum
 import ctypes
 import os
 libc = ctypes.CDLL("./build/operations.so")
+libc.allocate_data_block.restype = ctypes.c_int
 
 BLOCK_SIZE = 1024
 NAME_MAX_LENGTH = 32
@@ -53,6 +54,8 @@ class FileSystem(ctypes.Structure):
         ("root_node", ctypes.c_int)
     ]
 
+
+libc.allocate_data_block.argtypes = [ctypes.POINTER(FileSystem)]
 
 # creates a new filesystem using the C-Function
 def setup(fs_size):

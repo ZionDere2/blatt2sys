@@ -82,6 +82,13 @@ void inode_init(inode* i);
 int find_free_inode(file_system* fs);
 
 /*
+ * Reserve a free data block in the filesystem and return its index.
+ * The chosen block is cleared and marked as used in the free list.
+ * @return index of the allocated block or -1 if none is available.
+ */
+int allocate_data_block(file_system* fs);
+
+/*
 	* frees up memory
 */
 void cleanup(file_system* fs);

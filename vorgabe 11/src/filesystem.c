@@ -138,12 +138,27 @@ int fs_dump(file_system *fs, const char *file_path){
 
 
 int find_free_inode(file_system* fs){
-	for (int i=0; i<fs->s_block->num_blocks; i++) {
-		if(fs->inodes[i].n_type==free_block){
-			return i;
-		}
-	}
-	return -1;
+        for (int i=0; i<fs->s_block->num_blocks; i++) {
+                if(fs->inodes[i].n_type==free_block){
+                        return i;
+                }
+        }
+        return -1;
+}
+
+int allocate_data_block(file_system *fs) {
+        for (int i = 0; i < fs->s_block->num_blocks; i++) {
+                if (fs->free_list[i] == 1) {
+                        fs->free_list[i] = 0;
+                        fs->s_block->free_blocks--;
+
+                        fs->data_blocks[i].size = 0;
+                        memset(fs->data_blocks[i].block, 0, BLOCK_SIZE);
+
+                        return i;
+                }
+        }
+        return -1;
 }
 
 
