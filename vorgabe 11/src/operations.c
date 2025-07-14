@@ -41,6 +41,41 @@ static int find_free_block(file_system *fs)
     return -1;
 }
 
+// writes arbitrary bytes to a file node
+static int write_bytes(file_system *fs, int idx, const uint8_t *data, size_t len)
+{
+    size_t remaining = len;
+    size_t written = 0;
+
+    for (int i = 0; i < DIRECT_BLOCKS_COUNT && remaining > 0; ++i) {
+        int blk = fs->inodes[idx].direct_blocks[i];
+        if (blk == -1) {
+            blk = find_free_block(fs);
+            if (blk < 0)
+                return -2;
+            fs->inodes[idx].direct_blocks[i] = blk;
+            fs->free_list[blk] = 0;
+            fs->s_block->free_blocks--;
+            fs->data_blocks[blk].size = 0;
+        }
+
+        size_t space = BLOCK_SIZE - fs->data_blocks[blk].size;
+        if (space == 0)
+            continue;
+
+        size_t to_write = MIN(space, remaining);
+        memcpy(fs->data_blocks[blk].block + fs->data_blocks[blk].size,
+               data + written, to_write);
+        fs->data_blocks[blk].size += to_write;
+
+        written += to_write;
+        remaining -= to_write;
+    }
+
+    fs->inodes[idx].size += written;
+    return remaining == 0 ? (int)written : -2;
+}
+
 // Connects a child inode to a parent directory
 static int add_child_inode(file_system *fs, int parent, int child)
 {
@@ -146,33 +181,7 @@ int fs_writef(file_system *fs, char *filename, char *text)
     int idx = find_inode_by_path(fs, filename);
     if (idx < 0 || fs->inodes[idx].n_type != reg_file) return -1;
 
-    size_t remaining = strlen(text);
-    size_t written = 0;
-    for (int i = 0; i < DIRECT_BLOCKS_COUNT && remaining > 0; ++i) {
-        int blk = fs->inodes[idx].direct_blocks[i];
-        if (blk == -1) {
-            blk = find_free_block(fs);
-            if (blk < 0) return -2;
-            fs->inodes[idx].direct_blocks[i] = blk;
-            fs->free_list[blk] = 0;
-            fs->data_blocks[blk].size = 0;
-        }
-
-        size_t space = BLOCK_SIZE - fs->data_blocks[blk].size;
-        if (space == 0) continue;
-
-        size_t to_write = MIN(space, remaining);
-        memcpy(fs->data_blocks[blk].block + fs->data_blocks[blk].size,
-               text + written, to_write);
-        fs->data_blocks[blk].size += to_write;
-
-        written += to_write;
-        remaining -= to_write;
-    }
-
-    fs->inodes[idx].size += written;
-    if (remaining > 0) return -2; // no space left
-    return (int)written;
+    return write_bytes(fs, idx, (const uint8_t *)text, strlen(text));
 }
 
 // Reads a file and allocates a buffer with its contents
@@ -189,7 +198,7 @@ uint8_t *fs_readf(file_system *fs, char *filename, int *file_size)
     *file_size = fs->inodes[idx].size;
     if (*file_size == 0) return NULL;
 
-    uint8_t *buf = malloc(*file_size);
+    uint8_t *buf = malloc(*file_size + 1);
     if (!buf) return NULL;
     size_t copied = 0;
     for (int i = 0; i < DIRECT_BLOCKS_COUNT && copied < (size_t)*file_size; ++i) {
@@ -199,6 +208,7 @@ uint8_t *fs_readf(file_system *fs, char *filename, int *file_size)
         memcpy(buf + copied, fs->data_blocks[blk].block, bytes);
         copied += bytes;
     }
+    buf[*file_size] = 0;
     return buf;
 }
 
@@ -219,6 +229,7 @@ static void remove_inode_recursive(file_system *fs, int idx)
             if (blk != -1) {
                 fs->free_list[blk] = 1;
                 fs->data_blocks[blk].size = 0;
+                fs->s_block->free_blocks++; 
                 memset(fs->data_blocks[blk].block, 0, BLOCK_SIZE);
                 fs->inodes[idx].direct_blocks[i] = -1;
             }
@@ -294,6 +305,7 @@ static int copy_inode(file_system *fs, int src, int parent, const char *name)
             int free_b = find_free_block(fs);
             if (free_b < 0) return -1;
             fs->free_list[free_b] = 0;
+            fs->s_block->free_blocks--;
             fs->data_blocks[free_b] = fs->data_blocks[blk];
             fs->inodes[new_i].direct_blocks[i] = free_b;
         }
@@ -334,20 +346,31 @@ int fs_import(file_system *fs, char *int_path, char *ext_path)
     if (!fs || !int_path || !ext_path) return -1;
     FILE *f = fopen(ext_path, "rb");
     if (!f) return -1;
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char *buf = malloc(size + 1);
+
+    uint8_t *buf = malloc(size);
     if (!buf) {
         fclose(f);
         return -1;
     }
     fread(buf, 1, size, f);
     fclose(f);
-    buf[size] = '\0';
-    int ret = fs_writef(fs, int_path, buf);
+
+    int idx = find_inode_by_path(fs, int_path);
+    if (idx < 0 || fs->inodes[idx].n_type != reg_file) {
+        free(buf);
+        return -1;
+    }
+
+    int ret = write_bytes(fs, idx, buf, (size_t)size);
     free(buf);
-    return ret < 0 ? -1 : 0;
+    if (ret < 0) {
+        return ret;
+    }
+    return 0;
 }
 
 int fs_export(file_system *fs, char *int_path, char *ext_path)
