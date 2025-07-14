@@ -367,17 +367,28 @@ int fs_import(file_system *fs, char *int_path, char *ext_path)
 
     /* determine how many new blocks will be required */
     int used_blocks = 0;
+    int free_slots = 0;
     for (int i = 0; i < DIRECT_BLOCKS_COUNT; ++i) {
         if (fs->inodes[idx].direct_blocks[i] != -1)
             used_blocks++;
+        else
+            free_slots++;
     }
 
     size_t total_after = fs->inodes[idx].size + (size_t)size;
     int required_blocks = (int)((total_after + BLOCK_SIZE - 1) / BLOCK_SIZE);
     int new_blocks_needed = required_blocks - used_blocks;
 
-    if (new_blocks_needed > fs->s_block->free_blocks ||
-        required_blocks > DIRECT_BLOCKS_COUNT) {
+    /* count actual free blocks from the free list */
+    int free_count = 0;
+    for (int i = 0; i < fs->s_block->num_blocks; ++i) {
+        if (fs->free_list[i])
+            free_count++;
+    }
+
+    if (required_blocks > DIRECT_BLOCKS_COUNT ||
+        new_blocks_needed > free_slots ||
+        new_blocks_needed > free_count) {
         free(buf);
         return -2;
     }
