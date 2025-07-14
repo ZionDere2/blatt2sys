@@ -365,12 +365,26 @@ int fs_import(file_system *fs, char *int_path, char *ext_path)
         return -1;
     }
 
+    /* determine how many new blocks will be required */
+    int used_blocks = 0;
+    for (int i = 0; i < DIRECT_BLOCKS_COUNT; ++i) {
+        if (fs->inodes[idx].direct_blocks[i] != -1)
+            used_blocks++;
+    }
+
+    size_t total_after = fs->inodes[idx].size + (size_t)size;
+    int required_blocks = (int)((total_after + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    int new_blocks_needed = required_blocks - used_blocks;
+
+    if (new_blocks_needed > fs->s_block->free_blocks ||
+        required_blocks > DIRECT_BLOCKS_COUNT) {
+        free(buf);
+        return -2;
+    }
+
     int ret = write_bytes(fs, idx, buf, (size_t)size);
     free(buf);
-    if (ret < 0) {
-        return ret;
-    }
-    return 0;
+    return ret < 0 ? ret : 0;
 }
 
 int fs_export(file_system *fs, char *int_path, char *ext_path)
